@@ -1,0 +1,4416 @@
+# This workflow requires that you have an existing account with codescan.io
+# For more information about configuring your workflow,
+# read our documentation at https://github.com/codescan-io/codescan-scanner-action
+name: CodeScan
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches: [ main ]
+  schedule:
+    - cron: '40 14 * * 0'
+
+jobs:
+    CodeScan:
+        runs-on: ubuntu-latest
+        steps:
+            -   name: Checkout repository
+                uses: actions/checkout@v2
+            -   name: Cache files
+                uses: actions/cache@v2
+                with:
+                    path: |
+                        ~/.sonar
+                    key: ${{ runner.os }}-sonar
+                    restore-keys: ${{ runner.os }}-sonar
+            -   name: Run Analysis
+                uses: codescan-io/codescan-scanner-action@master
+                with:
+                    login: ${{ secrets.CODESCAN_AUTH_TOKEN }}
+                    organization: ${{ secrets.CODESCAN_ORGANIZATION_KEY }}
+                    projectKey: ${{ secrets.CODESCAN_PROJECT_KEY }}
+            -   name: Upload SARIF file
+                uses: github/codeql-action/upload-sarif@v1
+                with:
+                    sarif_file: codescan.sarif
+                    
+                    
+                    function OnGameEvent_mission_failed(params){
+	local classes = ["asw_drone",
+		"asw_buzzer",
+		"asw_parasite",
+		"asw_shieldbug",
+		"asw_grub",
+		"asw_drone_jumper",
+		"asw_harvester",
+		"asw_parasite_defanged",
+		"asw_queen",
+		"asw_boomer",
+		"asw_ranger",
+		"asw_mortarbug",
+		"asw_shaman",
+		"asw_drone_uber",
+		"npc_antlionguard_normal",
+		"npc_antlionguard_cavern"];
+	foreach (classname in classes){
+		local ent = null;
+		while ((ent = Entities.FindByClassname(ent, classname)) != null){
+			DoEntFire("!self", "Kill", "", 0, null, ent);
+		}
+	}
+
+	function Restart()
+		Director.RestartMission();
+	local target = Timer(1, Restart);
+
+	return;
+}
+
+function OnGameEvent_weapon_reload_finish(params){
+	local marine = EntIndexToHScript(params["marine"]);
+	local weapon = NetProps.GetPropEntity(marine, "m_hActiveWeapon");
+	if (weapon.GetClassname() == "asw_weapon_sniper_rifle")
+		weapon.SetClip1(7);
+	return;
+}
+
+function OnGameEvent_item_pickup(params){
+	local weapon = EntIndexToHScript(params["entindex"]);
+	if (regenWeaponTable1.rawin(weapon))
+		regenWeaponTable1.rawdelete(weapon);
+	if (lastClip1.rawin(weapon))
+		lastClip1.rawdelete(weapon);
+	if (regenWeaponTable2.rawin(weapon))
+		regenWeaponTable2.rawdelete(weapon);
+	if (lastClip2.rawin(weapon))
+		lastClip2.rawdelete(weapon);
+	local weaponClass = weapon.GetClassname();
+	switch (weaponClass){
+		case "asw_weapon_grenade_launcher":
+			if (weapon.Clip1() == 0)
+				BfgRecharging(weapon, 70);
+			return;
+		case "asw_weapon_railgun":
+			if (weapon.Clip1() == 0)
+				BfgRecharging(weapon, 70);
+			return;
+		case "asw_weapon_medkit":
+			if (weapon.Clip1() >= 2)
+				weapon.SetClip1(1);
+			return;
+		case "asw_weapon_flashlight":
+			isFlashlightActive[weapon] <- true;
+			return;
+		default: return;
+	}
+	return;
+}
+
+function OnGameEvent_weapon_fire(params){
+	local weapon = EntIndexToHScript(params["weapon"]);
+	local marine = EntIndexToHScript(params["marine"]);
+	local time = Time();
+	local weaponClass = weapon.GetClassname();
+	if (vecProtectionBubble && tScriptDelay + 0.2 < time && tProtectionDelay + 1 < time){
+		tScriptDelay = time;
+		local target = Entities.CreateByClassname("info_target");
+		target.SetOrigin(vecProtectionBubble);
+		local bIsInRadius = false;
+
+		local hNearEnt = null;
+		while ((hNearEnt = Entities.FindInSphere(hNearEnt, marine.GetOrigin(), 350)) != null){
+			if (hNearEnt == target){
+				bIsInRadius = true;
+				break;
+			}
+		}
+
+		if (bIsInRadius){
+			tProtectionDelay = time;
+			local targetScope = GetScrScope(target);
+			targetScope.tProtectionDelay <- tProtectionDelay;
+			targetScope.vecProtectionBubble <- vecProtectionBubble;
+			targetScope.LaunchVector <- LaunchVector;
+			targetScope.max <- max;
+			targetScope.think <- function(){
+				if (!self)
+					return 1;
+
+				if (tProtectionDelay + 1 < Time()){
+					self.Destroy();
+					return;
+				}
+
+				local hNearEnt = null;
+				while ((hNearEnt = Entities.FindInSphere(hNearEnt, vecProtectionBubble, 400)) != null){
+					if (hNearEnt.IsValid()){
+						local hNearEntClassname = hNearEnt.GetClassname();
+						if (hNearEntClassname == "asw_missile_round" && hNearEnt.GetOwner().GetClassname() == "asw_ranger"){
+							hNearEnt.StopSound("ASW_Ranger_Projectile.Spawned");
+							hNearEnt.EmitSound("Ranger.projectileImpactWorld");
+							DoEntFire("!self", "Kill", "", 0, null, hNearEnt);
+						} else if (hNearEnt.IsAlien() && hNearEntClassname != "asw_buzzer" && hNearEntClassname != "asw_queen"
+							|| hNearEntClassname == "asw_boomer_blob"
+							|| hNearEntClassname == "asw_mortarbug_shell"){
+							local vecDir = hNearEnt.GetOrigin() - vecProtectionBubble;
+							local vecDir = vecDir * (1/vecDir.Length());
+							local pushVector = Vector(vecDir.x, vecDir.y, 0) * 1050 + Vector(0,0,100);
+							hNearEnt.SetVelocity(pushVector);
+						}
+					}
+				}
+
+				return 0.1;
+			}
+			AddThinkToEnt(target, "think");
+		} else target.Destroy();
+	}
+
+	if (hWildcat && marine == hWildcat)
+		toggleWildcatInvis(hWildcat, AiTable, 1, -1);
+
+	if (hWolfe && marine == hWolfe){
+		if (weaponClass == "asw_weapon_minigun" && NetProps.GetPropFloat(weapon, "m_flSpinRate") == 1){
+			local point1 = Entities.CreateByClassname("info_particle_system");
+			DoEntFire("!self", "SetParent", "!activator", 0, weapon, point1);
+			DoEntFire("!self", "SetParentAttachment", "eject1", 0, weapon, point1);
+
+			local hParticleBeam = Entities.CreateByClassname("info_particle_system");
+			hParticleBeam.__KeyValueFromString("effect_name", "grenade_main_trail");
+			hParticleBeam.Spawn();
+			hParticleBeam.Activate();
+			local particleScope = GetScrScope(hParticleBeam);
+			particleScope.point1 <- point1;
+			particleScope.MarineAngles <- MarineAngles;
+			particleScope.attacker <- marine;
+			particleScope.Fire <- function(){
+				self.SetOrigin(point1.GetOrigin());
+				local angles = MarineAngles(attacker);
+				local step = 0;
+				if (NetProps.GetPropInt(attacker, "m_bWalking"))
+					step = RandomInt(-2, 2);
+				else step = RandomInt(-6, 6);
+				self.SetAngles(angles.x + step, angles.y + step, 0);
+				VecBulletDir <- self.GetForwardVector();
+				DoEntFire("!self", "Kill", "", 0, null, point1);
+				AddThinkToEnt(self, "MoveForward");
+				self.DisconnectOutput("OnUser1", "Fire");
+			}
+
+			particleScope.MoveForward <- function(){
+				local selfOrigin = self.GetOrigin() + VecBulletDir*40;
+				if ((TraceLine(self.GetOrigin(), selfOrigin, null) != 1)){
+					DoEntFire("!self", "Kill", "", 0, null, self);
+					return 3;
+				}
+
+				self.SetOrigin(selfOrigin);
+
+				local hNearEnt = null;
+				while ((hNearEnt = Entities.FindInSphere(hNearEnt, selfOrigin, 8)) != null){
+					local name = hNearEnt.GetName();
+					if (name != "" && (name == "hangerdoor_Right" || name == "hangerdoor_Left"
+						|| name == "hangerdoor_Left_top" || name == "hangerdoor_Right_top" || hNearEnt.GetClassname() == "asw_door")){
+						DoEntFire("!self", "Kill", "", 0, null, self);
+						return 3;
+					} else if (hNearEnt.IsAlien() || hNearEnt.GetClassname() == "prop_physics")
+						hNearEnt.TakeDamage(150, 256, attacker);
+				}
+
+				hNearEnt = null;
+				while ((hNearEnt = Entities.FindByClassnameWithin(hNearEnt, "asw_buzzer", selfOrigin, 120)) != null){
+					if (hNearEnt.IsValid()){
+						VecBulletDir = hNearEnt.GetOrigin() - selfOrigin;
+						VecBulletDir = VecBulletDir * (1/VecBulletDir.Length());
+						self.SetForwardVector(VecBulletDir);
+						break;
+					}
+				}
+
+				return 0.01;
+			}
+			hParticleBeam.ConnectOutput("OnUser1", "Fire");
+			EntFireByHandle(hParticleBeam, "Start", "", 0, self, self);
+			EntFireByHandle(hParticleBeam, "FireUser1", "", 0, self, self);
+			EntFireByHandle(hParticleBeam, "Kill", "", 0.4, self, self);
+			return;
+		} else if (weaponClass == "asw_weapon_devastator"){
+			weapon.EmitSound("ASW_Weapon_Vindicator.FireAndPumpFP");
+			return;
+		}
+	}
+
+	if (weaponClass == "asw_weapon_grenade_launcher"){
+		local point1 = Entities.CreateByClassname("info_target");
+		DoEntFire("!self", "SetParent", "!activator", 0, weapon, point1);
+		DoEntFire("!self", "SetParentAttachment", "muzzle", 0, weapon, point1);
+		GetScrScope(point1).EntSetLocalOrigin <- EntSetLocalOrigin;
+		point1.ConnectOutput("OnUser1", "EntSetLocalOrigin");
+		EntFireByHandle(point1, "FireUser1", "", 0, self, self);
+		DoEntFire("!self", "Kill", "", 2, null, point1);
+
+		weapon.EmitSound("Weapon_CombineGuard.Special1");
+
+		local muzzleGlow = ParticleSpawn(1, 0, 0, 0, "", "electrified_armor_burst2", "", "", weapon, 0, "muzzle", 0, "", "");
+		GetScrScope(muzzleGlow).EntSetLocalOrigin <- EntSetLocalOrigin;
+		muzzleGlow.ConnectOutput("OnUser1", "EntSetLocalOrigin");
+		EntFireByHandle(muzzleGlow, "FireUser1", "", 0, self, self);
+
+		local bfgBall = ParticleSpawn("", 0, 0, 0, "", "electric_weapon_zap_muzzle", "", "", weapon, 0, "muzzle", 0, "", "");
+		GetScrScope(bfgBall).EntSetLocalOrigin <- EntSetLocalOrigin;
+		bfgBall.ConnectOutput("OnUser1", "EntSetLocalOrigin");
+		EntFireByHandle(bfgBall, "FireUser1", "", 0, self, self);
+
+		local timerScope = Timer(0.1, BfgShot);
+		timerScope.weapon <- weapon;
+		timerScope.marine <- marine;
+		timerScope.point1 <- point1;
+		timerScope.StopLoop <- StopLoop;
+		timerScope.MarineAngles <- MarineAngles;
+		timerScope.MoveForward <- MoveForward;
+		timerScope.StopTimer <- StopTimer;
+		timerScope.flStartFire <- 0;
+		timerScope.bfgBall <- bfgBall;
+		BfgRecharging(weapon, 60);
+	} else if (weaponClass == "asw_weapon_shotgun"){
+		if (!shotgunTable.rawin(weapon)){
+			GetScrScope(weapon).shot <- function(){
+				self.SetClip1(2);
+				return;
+			}
+			weapon.ConnectOutput("OnUser2", "shot");
+			shotgunTable[weapon] <- time;
+			EntFireByHandle(weapon, "FireUser2", "", 0.8, self, self);
+		} else if (shotgunTable[weapon] + 0.8 <= time)
+			EntFireByHandle(weapon, "FireUser2", "", 0.8, self, self);
+	} else if (weaponClass == "asw_weapon_railgun"){
+		BfgRecharging(weapon, 60);
+	} else if (weaponClass == "asw_weapon_chainsaw"){
+		if (NetProps.GetPropInt(weapon, "m_fireState") != 0 && (!(chainsaw.rawin(marine)))){
+			chainsaw[marine] <- Entities.CreateByClassname("prop_dynamic");
+			chainsaw[marine].__KeyValueFromString("model", "models/weapons/chainsaw/chainsaw.mdl");
+			chainsaw[marine].SetOwner(marine);
+			chainsaw[marine].SetOrigin(marine.GetOrigin() + marine.GetForwardVector()*100);
+			local sawScope = GetScrScope(chainsaw[marine]);
+			sawScope.ChainsawPos <- function(){
+				self.SetLocalOrigin(Vector(200, 0, 40));
+				self.Spawn();
+				self.DisconnectOutput("OnUser1", "ChainsawPos");
+			}
+			sawScope.PitchSaw <- function(){
+				local marine = null;
+				if (self && self.GetOwner())
+					marine = self.GetOwner();
+				else return 0.1;
+				self.SetAngles(0, Time()*1000, 0);
+				local hNearEnt = null;
+				while ((hNearEnt = Entities.FindInSphere(hNearEnt, self.GetOrigin(), 30)) != null){
+					if (hNearEnt.IsValid()){
+						local hNearEntClass = hNearEnt.GetClassname();
+						if (hNearEnt.IsAlien() || hNearEntClass == "prop_physics")
+							hNearEnt.TakeDamage(250, 4098, marine);
+						else if (hNearEntClass == "asw_marine")
+							hNearEnt.TakeDamage(20, 4098, marine);
+						else if (hNearEntClass == "asw_door")
+							hNearEnt.TakeDamage(30, 4098, null );
+					}
+				}
+				/*
+				if (self.GetLocalOrigin().x < 400 && !(TraceLine(marine.GetOrigin(), self.GetOrigin(), null) < 1))
+					self.SetLocalOrigin(self.GetLocalOrigin() + Vector(20, 0, 0));
+				else self.SetLocalOrigin(Vector(60, 0, 40));
+				*/
+				return 0.1;
+			}
+			AddThinkToEnt(chainsaw[marine], "PitchSaw");
+			DoEntFire("!self", "SetParent", "!activator", 0, marine, chainsaw[marine]);
+			chainsaw[marine].ConnectOutput("OnUser1", "ChainsawPos");
+			EntFireByHandle(chainsaw[marine], "FireUser1", "", 0, self, self);
+			chainsaw[marine].EmitSound("ASW_Chainsaw.attackOn");
+			local target = Entities.CreateByClassname("info_particle_system");
+			target.SetOrigin(chainsaw[marine].GetOrigin());
+			DoEntFire("!self", "SetParent", "!activator", 0, chainsaw[marine], target);
+			particleChainsawTable[chainsaw[marine]] <- ParticleSpawn("", 0, 0, 0, "", "buffgrenade_attach_arc_perm", "", "", weapon, 0, "eject", 0, target, "");
+		}
+	}
+
+	return;
+}
+
+function OnGameEvent_weapon_offhand_activate(params){
+	//printl("rename it to OnGameEvent_extra_button_pressed...");
+	local weapon = EntIndexToHScript(params["weapon"]);
+	local marine = EntIndexToHScript(params["marine"]);
+	local weaponClip1 = weapon.Clip1();
+	local weaponClass = weapon.GetClassname();
+	switch (weaponClass){
+		case "asw_weapon_stim":
+			if (weaponClip1 == 0 && (!isawaliable.rawin(weapon) || isawaliable[weapon])){
+				local sModelName = marine.GetModelName();
+				local flMarineMaxHealth = marine.GetMaxHealth().tofloat();
+				if (sModelName == "models/swarm/marine/marine.mdl" || sModelName == "models/swarm/marine/femalemarine.mdl"){
+					marine.DropWeapon(0);
+					marine.DropWeapon(1);
+					NetProps.SetPropInt(marine, "m_bFaceMeleeYaw", 0);
+					marine.SetModel("models/aliens/mortar/mortar.mdl");
+					NetProps.SetPropFloat(marine, "m_flModelScale", flMarineMaxHealth/100 + 0.2);
+					local flHealth = ((marine.GetHealth().tofloat()*100)/flMarineMaxHealth)/100;
+					marine.SetMaxHealth(marine.GetMaxHealth()*2);
+					marine.SetHealth(marine.GetMaxHealth().tofloat()*flHealth);
+					marine.SetSize(Vector(-13,-13,0), Vector(13,13,72));
+					local target = Entities.CreateByClassname("info_target");
+					target.SetOwner(marine);
+					target.SetName("0fun_mortarthink");
+					local targetScope = GetScrScope(target);
+					targetScope.LaunchVector <- LaunchVector;
+					targetScope.bAttackedByShieldbug <- bAttackedByShieldbug;
+					targetScope.hMortarProp <- hMortarProp;
+					targetScope.delay <- Time() - 1.8;
+					targetScope.max <- max;
+					targetScope.mortarShot <- mortarShot;
+					AddThinkToEnt(target, "mortarShot");
+					if (sModelName == "models/swarm/marine/marine.mdl")
+						isawaliable[marine] <- "male";
+					else isawaliable[marine] <- "female";
+					targetScope.isawaliable <- isawaliable;
+				} else {
+					if (sModelName == "models/aliens/mortar/mortar.mdl"){
+						local targettodestroy = null;
+						while((targettodestroy = Entities.FindByName(targettodestroy, "0fun_mortarthink")) != null){
+							if (targettodestroy.GetOwner() == marine)
+								targettodestroy.Destroy();
+						}
+
+						local flHealth = ((marine.GetHealth().tofloat()*100)/flMarineMaxHealth)/100;
+						marine.SetMaxHealth(marine.GetMaxHealth()/2);
+						marine.SetHealth(marine.GetMaxHealth().tofloat()*flHealth);
+						if (isawaliable[marine] == "male")
+							marine.SetModel("models/swarm/marine/marine.mdl");
+						else marine.SetModel("models/swarm/marine/femalemarine.mdl");
+						marine.SetSize(Vector(-13,-13,0), Vector(13,13,72));
+						NetProps.SetPropFloat(marine, "m_flModelScale", 1);
+
+						if (hMortarProp.rawin(marine)){
+							hMortarProp[marine].Destroy();
+							hMortarProp.rawdelete(marine);
+							if (marine.IsInhabited()){
+								NetProps.SetPropInt(marine, "movetype", 2);
+							} else NetProps.SetPropInt(marine, "movetype", 3);
+						}
+					}
+				}
+				isawaliable[weapon] <- false;
+			}
+			return;
+		case "asw_weapon_grenades":
+			if (weaponClip1 != 0 && (!timeforexplosion.rawin(weapon) || timeforexplosion[weapon] + 0.3 < Time())){
+				local hGrenadeCluster = Entities.CreateByClassname("asw_boomer_blob");
+				hGrenadeCluster.SetOrigin(marine.GetOrigin() + marine.GetForwardVector()*30 + Vector(0, 0, 60));
+				hGrenadeCluster.Spawn();
+				hGrenadeCluster.Activate();
+				hGrenadeCluster.SetModel("models/swarm/grenades/HandGrenadeProjectile.mdl");
+				hGrenadeCluster.SetCollisionGroup(32);
+				hGrenadeCluster.SetForwardVector(marine.GetForwardVector());
+				NetProps.SetPropFloat(hGrenadeCluster, "m_fDetonateTime", 1337);
+				local hGrenadeClusterScope = GetScrScope(hGrenadeCluster);
+				hGrenadeClusterScope.Detonate <- Detonate;
+				hGrenadeClusterScope.Magnit <- Magnit;
+				hGrenadeClusterScope.LaunchVector <- LaunchVector;
+				hGrenadeCluster.ConnectOutput("OnUser1", "Detonate");
+				EntFireByHandle(hGrenadeCluster, "FireUser1", "", 3, self, self);
+				PushToCursor(hGrenadeCluster, marine, 0.0, 500);
+				ParticleSpawn("", 0, 0, 0, "", "grenade_smoke", "", "", hGrenadeCluster, 0, "fuse", 0, "", "");
+				timeforexplosion[weapon] <- Time();
+			}
+			return;
+		case "asw_weapon_medkit":
+			if (weaponClip1 == 0 && (!isawaliable.rawin(weapon) || isawaliable[weapon])){
+				marine.SetHealth(marine.GetMaxHealth());
+				marine.CureInfestation();
+				isawaliable[weapon] <- false;
+			}
+			return;
+		case "asw_weapon_flashlight":
+			if (marinesTable.rawin(marine)){
+				if (isFlashlightActive[weapon]){
+					isFlashlightActive[weapon] <- false;
+				} else isFlashlightActive[weapon] <- true;
+			}
+			return;
+		case "asw_weapon_buff_grenade":
+			if (weaponClip1 == 0 && !lastAmp.rawin(weapon)){
+				lastAmp[weapon] <- marine.GetMarineName();
+			}
+			return;
+		default: return;
+	}
+	return;
+}
+
+function OnGameEvent_heal_beacon_placed(params)
+{
+	local hOldBeacon = EntIndexToHScript(params["entindex"]);
+	local marine = EntIndexToHScript(params["marine"]);
+	local hHealBeacon = PlaceHealBeacon(9999, 6, 0, 30, 200, hOldBeacon.GetOrigin());
+	PushToCursor(hHealBeacon, marine, 0.0, 800.0);
+	hOldBeacon.Destroy();
+	return;
+}
+
+function OnGameEvent_damage_amplifier_placed(params)
+{
+	hAmp <- EntIndexToHScript(params["entindex"]);
+	hMarineInDamageAmpPlacedEvent <- EntIndexToHScript(params["marine"]);
+	local sMarineName = hMarineInDamageAmpPlacedEvent.GetMarineName();
+	switch (sMarineName){
+		case "Jaeger":
+			if (!immortalOwner){
+				immortalOwner = hMarineInDamageAmpPlacedEvent;
+				BubbleDuration(20, immortalOwner, Jaeger);
+				immortalOwner.EmitSound("ASW_ElectrifiedSuit.Loop");
+				SpawnFullDome(20);
+				local particle = ParticleSpawn(20, 0, 0, 10, hMarineInDamageAmpPlacedEvent, "stungrenade_arc_sprites_copy", "NPC_SScanner.DiveBomb", "NPC_SScanner.DiveBomb", hMarineInDamageAmpPlacedEvent, 0, "", 0, "", hMarineInDamageAmpPlacedEvent);
+				local timerScope = Timer(0.1, SetParentDelay);
+				timerScope.toget <- hMarineInDamageAmpPlacedEvent;
+				timerScope.toset <- particle;
+				hAmp.EmitSound("NPC_SScanner.DiveBomb");
+			}
+			hAmp.Destroy();
+			return;
+		case "Sarge":
+			if (!vecProtectionBubble){
+				BubbleDuration(50, SpawnFullDome(51), Sarge);
+				vecProtectionBubble = hAmp.GetOrigin();
+				ParticleSpawn(1, 0, 0, 25, hMarineInDamageAmpPlacedEvent, "electrified_armor_burst", "NPC_SScanner.DiveBomb", "NPC_SScanner.DiveBomb", hMarineInDamageAmpPlacedEvent, 0, "", 0, "", hMarineInDamageAmpPlacedEvent);
+				hAmp.EmitSound("NPC_SScanner.DiveBomb");
+			}
+			hAmp.Destroy();
+			return;
+		case "Crash":
+		case "Vegas":
+			local angle = hMarineInDamageAmpPlacedEvent.GetAngles();
+			local vector = hAmp.GetOrigin();
+			local spawnSentryFunc = function(vector, angle, x, y, z, classname){
+				local sentry = Entities.CreateByClassname(classname);
+				sentry.SetOrigin(vector + Vector(x, y, z));
+				sentry.SetAnglesVector(angle);
+				sentry.Spawn();
+				DoEntFire("!self", "Kill", "", 20, null, sentry);
+				return sentry;
+			}
+			local sentryAnimationFunc = function(){
+				if (i >= max)
+					dir = "max";
+				else if (i <= min)
+					dir = "min";
+				if (dir == "min")
+					i += step;
+				else if (dir == "max")
+					i -= step;
+				self.SetOrigin(self.GetOrigin() + Vector(0, 0, i));
+				return 0.05;
+			}
+			local injection = function(sentry, func){
+				local sentryScope = GetScrScope(sentry);
+				sentryScope.func <- func;
+				sentryScope.min <- -1.0;
+				sentryScope.max <- 1.0;
+				sentryScope.step <- 0.1;
+				sentryScope.dir <- "max";
+				sentryScope.i <- 0;
+				AddThinkToEnt(sentry, "func");
+				return;
+			}
+			local s1 = spawnSentryFunc(vector, angle, 0, 0, -50, "asw_sentry_top_machinegun");
+			local s2 = spawnSentryFunc(vector, angle, 50, 60, -50, "asw_sentry_top_flamer");
+			local s3 = spawnSentryFunc(vector, angle, -50, 60, -50, "asw_sentry_top_icer");
+
+			injection(s1, sentryAnimationFunc);
+			injection(s2, sentryAnimationFunc);
+			injection(s3, sentryAnimationFunc);
+
+			ParticleSpawn(2, 0, 0, -25, hAmp, "boomer_drop_heat", "", "", "", 0, "", 0, "", "");
+			ParticleSpawn(2, 50, 90, -25, hAmp, "boomer_drop_heat", "", "", "", 0, "", 0, "", "");
+			ParticleSpawn(2, -50, 90, -25, hAmp, "boomer_drop_heat", "", "", "", 0, "", 0, "", "");
+			ParticleSpawn(20, 0, 0, 10, hAmp, "electric_weapon_zap_muzzle", "ASW_Sentry.Dismantled", "", s1, 0, "", 0, "", "");
+			ParticleSpawn(20, 50, 60, 10, hAmp, "electric_weapon_zap_muzzle", "", "", s2, 0, "", 0, "", "");
+			ParticleSpawn(20, -50, 60, 10, hAmp, "electric_weapon_zap_muzzle", "", "", s3, 0, "", 0, "", "");
+			ParticleSpawn(20, 0, 0, -35, hAmp, "powerup_electric_bullets", "ASW_Blink.Teleport", "", "", 0, "", 0, "", "");
+			ParticleSpawn(20, 50, 60, -35, hAmp, "powerup_electric_bullets", "", "", "", 0, "", 0, "", "");
+			ParticleSpawn(20, -50, 60, -35, hAmp, "powerup_electric_bullets", "", "", "", 0, "", 0, "", "");
+			ParticleSpawn(20, 0, 0, -35, hAmp, "powerup_increased_speed", "ASW_Sentry.Deploy", "", "", 0, "", 0, "", "");
+			ParticleSpawn(20, 50, 60, -35, hAmp, "powerup_increased_speed", "", "", "", 0, "", 0, "", "");
+			ParticleSpawn(20, -50, 60, -35, hAmp, "powerup_increased_speed", "", "", "", 0, "", 0, "", "");
+			hAmp.Destroy();
+			return;
+		case "Faith":
+		case "Bastille":
+			local marine = null;
+			while ((marine = Entities.FindByClassname(marine, "asw_marine")) != null){
+				marine.CureInfestation();
+				marine.SetHealth(marine.GetMaxHealth());
+				marine.SetKnockedOut(false);
+				if (!marinesTable.rawin(marine)){
+					marinesTable[marine] <- marine;
+					if (IsExtraEquipped("asw_weapon_flashlight", marine))
+						isFlashlightActive[NetProps.GetPropEntityArray(marine, "m_hMyWeapons", 2)] <- true;
+					local hParticle = ParticleSpawn(1.5, 0, 0, 0, "", "marine_resurrection", "ASWInterface.MissionBoxes", "ASWInterface.MissionBoxes", marine, 0, "Center", 0.01, "", marine);
+					DoEntFire("!self", "Kill", "", 0, null, incParticleTable[marine]);
+					incParticleTable.rawdelete(marine);
+					incDelayTable[marine] <- Time();
+					noInstaDeathAfterReviveTable[marine] <- 1;
+					marine.SetMaxHealth(maxhpTable[marine]);
+					maxhpTable.rawdelete(marine);
+				}
+				ParticleSpawn(2, 0, 0, 0, marine, "medgrenade_cross", "ASW_Medkit.Use", "", marine, 0, "", 0, "", "");
+			}
+			hAmp.Destroy();
+			return;
+		case "Wildcat":
+			if (hWildcat){
+				hAmp.Destroy();
+				return;
+			}
+			hWildcat = hMarineInDamageAmpPlacedEvent;
+			wildcatInvisibility = Time();
+			foreach (classname in aliensArray){
+				local ai_relationship = Entities.CreateByClassname("ai_relationship");
+				AiTable[ai_relationship] <- ai_relationship;
+				ai_relationship.__KeyValueFromString("disposition", "4");
+				ai_relationship.__KeyValueFromString("rank", "999");
+				ai_relationship.__KeyValueFromString("target", "#asw_name_wildcat");
+				ai_relationship.__KeyValueFromString("subject", classname);
+				DoEntFire("!self", "ApplyRelationship", "", 0, null, ai_relationship);
+				DoEntFire("!self", "RevertToDefaultRelationship", "", 5, null, ai_relationship);
+				DoEntFire("!self", "Kill", "", 5.1, null, ai_relationship);
+			}
+			toggleWildcatInvis(hWildcat, "", 0, 3);
+			hAmp.Destroy();
+			return;
+		case "Wolfe":
+			if (hWolfe)
+				return;
+			hWolfe = hMarineInDamageAmpPlacedEvent;
+			wolfeDouble = Time();
+			ParticleSpawn(50, 0, 0, 0, "", "ground_fire", "ASWInterface.SelectWeaponSlot", "", hWolfe, 0, "eyes", 0, "", "");
+			ParticleSpawn(3, 0, 0, 65, hWolfe, "explosion_huge_c", "ASWInterface.SelectWeaponSlot", "", hWolfe, 0, "", 0, "", "");
+			hAmp.Destroy();
+			return;
+		default: return;
+	}
+
+	return;
+}
+
+function OnGameEvent_sentry_complete(params)
+{
+	local sentry = EntIndexToHScript(params["entindex"]);
+	sentry.SetCollisionGroup(24);
+	sentry.SetSize( Vector(0,0,0), Vector(0,0,0));
+	return;
+}
+//remove collision for sentry base
+function OnGameEvent_sentry_start_building(params)
+{
+	local sentry = EntIndexToHScript(params["entindex"]);
+	sentry.SetCollisionGroup(24);
+	sentry.SetSize( Vector(0,0,0), Vector(0,0,0));
+	return;
+}
+
+function OnGameEvent_entity_killed(params)
+{
+	// if	(!params["entindex_killed"])
+		// return;
+	// if	(!params["entindex_attacker"])
+		// return;		
+		
+	local victim = EntIndexToHScript(params["entindex_killed"]);
+	local attacker = EntIndexToHScript( params["entindex_attacker"] );
+
+//原来4fun2
+	local victimClassname = victim.GetClassname();
+
+	if (victim.IsAlien()){
+		/*
+		if ()
+			if (explosedAliens.len() < 15)
+				explosedAliens.push(victim);
+			else bAccess = false;
+		*/
+
+		if (victim.GetName() == "asw_0fun_buzzer"){
+			victim.StopSound("d1_town.LargeFireLoop");
+			victim.StopSound("d1_town.LargeFireLoop");
+		}
+
+		if (TeslaAliensTable.rawin(victim)){
+			TeslaAliensTable.rawdelete(victim);
+			victim.DisconnectOutput("OnUser1", "SetDefaultSpeed");
+		}
+
+		if (victim in charmedAliens)
+			charmedAliens.rawdelete(victim);
+
+		//return;
+	}
+
+	if (victimClassname == "asw_marine"){
+		if (chainsaw.rawin(victim)){
+			chainsaw[victim].StopSound("ASW_Chainsaw.attackOn");
+			chainsaw[victim].EmitSound("ASW_Chainsaw.Stop");
+			DoEntFire("!self", "Kill", "", 0, null, particleChainsawTable[chainsaw[victim]]);
+			particleChainsawTable.rawdelete(chainsaw[victim]);
+			DoEntFire("!self", "Kill", "", 0, null, chainsaw[victim]);
+			chainsaw.rawdelete(victim);
+		}
+
+		marinesTable.rawdelete(victim);
+		if (Convars.GetStr("rd_allow_revive") == "1.000000"){
+			DoEntFire("!self", "Kill", "", 0, null, incParticleTable[victim]);
+			incParticleTable.rawdelete(victim);
+		}
+
+		if (victim == immortalOwner){
+			victim.StopSound("ASW_ElectrifiedSuit.Loop");
+			immortalOwner = null;
+		}
+
+		local targettodestroy = null;
+		while((targettodestroy = Entities.FindByName(targettodestroy, "0fun_mortarthink")) != null){
+			if (targettodestroy.GetOwner() == victim)
+				targettodestroy.Destroy();
+		}
+
+		if (victim.GetModelName() == "models/aliens/mortar/mortar.mdl")
+			victim.EmitSound("ASW_MortarBug.Death");
+
+		if (hMortarProp.rawin(victim)){
+			hMortarProp[victim].DisconnectOutput("OnUser2", "Shot");
+			hMortarProp[victim].DisconnectOutput("OnUser1", "Shot");
+			hMortarProp[victim].Destroy();
+			hMortarProp.rawdelete(victim);
+			NetProps.SetPropFloat(victim, "m_flModelScale", (victim.GetMaxHealth().tofloat()/100)/2 + 0.2);
+		}
+		return;  //玩家死亡后直接返回2.2更新
+	}
+
+	// if (victimClassname == "asw_grenade_cluster"){
+		// victim.Destroy();
+		// return;
+	// }
+
+
+	if ( !attacker || !victim )
+		return;
+//分割
+
+
+// Power
+if (  attacker != null && victim != null && attacker.GetClassname() == "asw_marine" && victim.IsAlien() )
+{
+	for (local checkWeapon = attacker.FirstMoveChild(); checkWeapon != null; checkWeapon = checkWeapon.NextMovePeer())
+	{
+		switch(checkWeapon.GetClassname())
+		{
+			case "asw_weapon_gas_grenades":
+				//CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "antlion_spit_trail");
+				CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "disease_buff");
+				CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "powerup_chemical_bullets");
+
+				DropGasGrenade(20, 0.3, 0.1, 3, victim.GetOrigin() + Vector(0, 0, 10));
+				break;
+
+			case "asw_weapon_flashlight":
+				local fireChance = RandomInt(1, 10);
+				if (fireChance < 10)
+				{
+					victim.EmitSound("ASW_Mine.Explode");
+
+					CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "explosion_huge_k");
+
+					local nearTarget = null;
+					while((nearTarget = Entities.FindInSphere(nearTarget, victim.GetOrigin(), 175)) != null)
+					{
+						if ( nearTarget.IsAlien() )
+							nearTarget.Ignite(4);
+						else if ( nearTarget.GetClassname() != "asw_marine" )
+							nearTarget.TakeDamage(0, 8, victim);
+					}
+				}
+				break;
+
+			case "asw_weapon_freeze_grenades":
+				if(attacker.GetMarineName() != "Wildcat")
+				{
+					local fireChance = RandomInt(1, 10);
+					if (fireChance < 10)
+					{
+						victim.EmitSound("ASW_Freeze_Grenade.Explode");
+
+						CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "freeze_statue_mist");
+						CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "freeze_statue_mist");
+						CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "freeze_statue_mist");
+						CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "freeze_statue_mist");
+						CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "freeze_statue_mist");
+
+						local nearTarget = null;
+						while((nearTarget = Entities.FindInSphere(nearTarget, victim.GetOrigin(), 175)) != null)
+						{
+							if ( nearTarget.IsAlien() )
+								nearTarget.Freeze(1);
+							else if ( nearTarget.GetClassname() == "asw_marine" )
+								nearTarget.Extinguish();
+						}
+					}
+				}
+				break;
+
+			case "asw_weapon_electrified_armor":
+				local fireChance = RandomInt(1, 10);
+				if (fireChance < 10)
+				{
+					victim.EmitSound("ASW_Tesla_Laser.Damage");
+
+					CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "stungrenade_arc_sprites");
+
+					local nearTarget = null;
+					while((nearTarget = Entities.FindInSphere(nearTarget, victim.GetOrigin(), 175)) != null)
+					{
+						if ( nearTarget.IsAlien() )
+							nearTarget.ElectroStun(4);
+					}
+				}
+				break;
+
+			case "asw_weapon_jump_jet":
+				CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "boomer_drop_shockwave1");
+
+				local nearTarget = null;
+				while((nearTarget = Entities.FindInSphere(nearTarget, victim.GetOrigin(), 150)) != null)
+				{
+					if (nearTarget.GetClassname() == "asw_shieldbug" || nearTarget.GetClassname() == "asw_antlionguard_normal" || nearTarget.GetClassname() == "asw_antlionguard_cavern" || nearTarget.GetClassname() == "asw_boomer" || nearTarget.GetClassname() == "asw_harvester" || nearTarget.GetClassname() == "asw_drone_uber" || nearTarget.GetClassname() == "asw_mortarbug")
+					{
+						nearTarget.SetVelocity(Vector(0, 0, 240));
+					}
+					else if (nearTarget.GetClassname() == "asw_queen")
+						{}
+					else if (nearTarget.IsAlien())
+					{
+						nearTarget.SetVelocity(Vector(0, 0, 300));
+					}
+
+				}
+				break;
+
+			case "asw_weapon_laser_mines":
+				if(attacker.GetMarineName() == "Sarge")
+				{
+					switch (RandomInt(1, 4))
+					{
+						case 1:
+						//8
+						if( RandomInt(1, 200) == 1 )
+							PlantLaserMine(false, victim.GetOrigin() + Vector(0, 20, 0), Vector(sargeAng, 270, 0));
+						else
+							PlantLaserMine(true, victim.GetOrigin() + Vector(0, 20, 0), Vector(sargeAng, 270, 0));
+						if( RandomInt(1, 200) == 1 )
+							PlantLaserMine(false, victim.GetOrigin() + Vector(17.32, -10, 0), Vector(sargeAng, 150, 0));
+						else
+							PlantLaserMine(true, victim.GetOrigin() + Vector(17.32, -10, 0), Vector(sargeAng, 150, 0));
+						if( RandomInt(1, 200) == 1 )
+							PlantLaserMine(false, victim.GetOrigin() + Vector(-17.32, -10, 0), Vector(sargeAng, 30, 0));
+						else
+							PlantLaserMine(true, victim.GetOrigin() + Vector(-17.32, -10, 0), Vector(sargeAng, 30, 0));
+						break;
+						case 2:
+						//2
+						if( RandomInt(1, 200) == 1 )
+							PlantLaserMine(false, victim.GetOrigin() + Vector(0, -20, 0), Vector(sargeAng, 90, 0));
+						else
+							PlantLaserMine(true, victim.GetOrigin() + Vector(0, -20, 0), Vector(sargeAng, 90, 0));
+						if( RandomInt(1, 200) == 1 )
+							PlantLaserMine(false, victim.GetOrigin() + Vector(-17.32, 10, 0), Vector(sargeAng, 330, 0));
+						else
+							PlantLaserMine(true, victim.GetOrigin() + Vector(-17.32, 10, 0), Vector(sargeAng, 330, 0));
+						if( RandomInt(1, 200) == 1 )
+							PlantLaserMine(false, victim.GetOrigin() + Vector(17.32, 10, 0), Vector(sargeAng, 210, 0));
+						else
+							PlantLaserMine(true, victim.GetOrigin() + Vector(17.32, 10, 0), Vector(sargeAng, 210, 0));
+						break;
+						case 3:
+						//4
+						if( RandomInt(1, 200) == 1 )
+							PlantLaserMine(false, victim.GetOrigin() + Vector(-20, 0, 0), Vector(sargeAng, 0, 0));
+						else
+							PlantLaserMine(true, victim.GetOrigin() + Vector(-20, 0, 0), Vector(sargeAng, 0, 0));
+						if( RandomInt(1, 200) == 1 )
+							PlantLaserMine(false, victim.GetOrigin() + Vector(10, 17.32, 0), Vector(sargeAng, 240, 0));
+						else
+							PlantLaserMine(true, victim.GetOrigin() + Vector(10, 17.32, 0), Vector(sargeAng, 240, 0));
+						if( RandomInt(1, 200) == 1 )
+							PlantLaserMine(false, victim.GetOrigin() + Vector(10, -17.32, 0), Vector(sargeAng, 120, 0));
+						else
+							PlantLaserMine(true, victim.GetOrigin() + Vector(10, -17.32, 0), Vector(sargeAng, 120, 0));
+						break;
+						case 4:
+						//6
+						if( RandomInt(1, 200) == 1 )
+							PlantLaserMine(false, victim.GetOrigin() + Vector(20, 0, 0), Vector(sargeAng, 180, 0));
+						else
+							PlantLaserMine(true, victim.GetOrigin() + Vector(20, 0, 0), Vector(sargeAng, 180, 0));
+						if( RandomInt(1, 200) == 1 )
+							PlantLaserMine(false, victim.GetOrigin() + Vector(-10, -17.32, 0), Vector(sargeAng, 60, 0));
+						else
+							PlantLaserMine(true, victim.GetOrigin() + Vector(-10, -17.32, 0), Vector(sargeAng, 60, 0));
+						if( RandomInt(1, 200) == 1 )
+							PlantLaserMine(false, victim.GetOrigin() + Vector(-10, 17.32, 0), Vector(sargeAng, 300, 0));
+						else
+							PlantLaserMine(true, victim.GetOrigin() + Vector(-10, 17.32, 0), Vector(sargeAng, 300, 0));
+						break;
+					}
+				}
+				else
+				{
+					local who = 10;
+
+					switch(attacker.GetMarineName())
+					{
+						case "Jaeger":	who = 50;	break;
+						case "Crash":	who = 30;	break;
+					}
+					if( RandomInt(1, 100) <= who )
+						PlantLaserMine(false, victim.GetOrigin(), Vector(-90, 0, 0));
+					else
+						PlantLaserMine(true, victim.GetOrigin(), Vector(-90, 0, 0));
+				}
+				break;
+
+			case "asw_weapon_hornet_barrage":
+				CreateParticleFunc(2, attacker.GetOrigin(), Vector(0, 0, 0), "explosion_shockwave1");
+
+				local nearTarget = null;
+				while((nearTarget = Entities.FindInSphere(nearTarget, attacker.GetOrigin(), 130)) != null)
+				{
+					if ( nearTarget.IsAlien() )
+					{
+						if ( nearTarget.GetClassname() == "asw_parasite" ||
+						nearTarget.GetClassname() == "asw_parasite_defanged" ||
+						nearTarget.GetClassname() == "asw_buzzer" ||
+						nearTarget.GetClassname() == "asw_shaman" )
+							nearTarget.TakeDamage(256, 0, victim);
+						else
+							nearTarget.TakeDamage(20, 0, victim);
+					}
+				}
+				break;
+
+			case "asw_weapon_smart_bomb":
+				CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "explosion_shockwave1");
+
+				local nearTarget = null;
+				while((nearTarget = Entities.FindInSphere(nearTarget, victim.GetOrigin(), 130)) != null)
+				{
+					if ( nearTarget.IsAlien() )
+					{
+						if ( nearTarget.GetClassname() == "asw_parasite" ||
+						nearTarget.GetClassname() == "asw_parasite_defanged" ||
+						nearTarget.GetClassname() == "asw_buzzer" ||
+						nearTarget.GetClassname() == "asw_shaman" )
+							nearTarget.TakeDamage(256, 0, victim);
+						else
+							nearTarget.TakeDamage(20, 0, victim);
+					}
+				}
+				break;
+
+			case "asw_weapon_medkit":
+				if(attacker.GetMarineName() == "Bastille")
+				{
+					PlaceHealBeacon(40, 5, 5, 3, 80, victim.GetOrigin() + Vector(0, 0, 10));
+				}
+
+				if(attacker.GetHealth() < attacker.GetMaxHealth())
+				{
+					CreateParticleFunc(2, attacker.GetOrigin(), Vector(0, 0, 0), "antlion_gib_02_trailsB");
+
+					if( attacker.GetHealth() >= attacker.GetMaxHealth() - 4 )
+					{
+						attacker.EmitSound("ASW_HealGun.StartHeal");
+						CreateParticleFunc(2, attacker.GetOrigin(), Vector(0, 0, 0), "explosion_vind_a");
+					}
+				}
+				attacker.SetHealth(attacker.GetHealth() + 4);
+
+				if(attacker.GetHealth() > attacker.GetMaxHealth())
+					attacker.SetHealth(attacker.GetMaxHealth());
+				break;
+
+			case "asw_weapon_buff_grenade":
+				if(attacker.GetMarineName() == "Vegas")
+				{
+					CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "ammo_satchel_take_lrg");
+
+					local boomChance = RandomInt( 1, 1000 );
+					if ( boomChance <= 1 )
+					{
+						CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "explosion_sparks");
+						CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "explosion_sparks");
+						CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "explosion_sparks");
+						//1.6版本更新
+						//local ammo = Entities.CreateByClassname( "asw_ammo_drop" );
+						//ammo.SetOrigin( victim.GetOrigin() ); ammo.Spawn();
+					}
+				}
+				break;
+		}
+	}
+}
+
+if ( attacker.GetClassname() == "asw_marine" && victim.IsAlien() && (victim.GetClassname() == "asw_drone" || victim.GetClassname() == "asw_drone_jumper"))
+{
+	local WeaponName = "";
+	local randomChance = RandomInt( 1, 1000 );
+
+	// drop rate default 80 (8%)
+	//改8
+	//1.7改成1 (也就是爆率变成1/1000)
+	if ( randomChance > difficultyCorrect + 1 )
+		return;
+
+	// lucky chance default 40 (2.5%, 5%)
+	local luckyCheck = RandomInt( 1, 40 );
+
+	switch ( luckyCheck )
+	{
+		case 1:
+		luckyCheck = 3;
+		////3.5更新注释掉提示 ClientPrint(null, 3, "走狗屎运 !");
+		//CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "explosion_vind_a");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		case 2:
+		case 3:
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		luckyCheck = 2;
+		break;
+
+		default:
+		luckyCheck = 1;
+	}
+
+	for ( local i = 0 ; i < luckyCheck ; i++)
+	{
+		local whatItem = RandomInt( 1, 900 );
+
+		// Weapon
+		if ( whatItem <= 10 )
+		{
+			WeaponName = "asw_weapon_flamer";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "喷火器!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 20 )
+		{
+			WeaponName = "asw_weapon_grenade_launcher";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "榴弹发射器 !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 40 )
+		{
+			WeaponName = "asw_weapon_vindicator";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 60 )
+		{
+			switch ( RandomInt( 1, 4 ) )
+			{
+				case 1:
+				WeaponName = "asw_weapon_sentry";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 2:
+				WeaponName = "asw_weapon_sentry_freeze";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 3:
+				WeaponName = "asw_weapon_sentry_flamer";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 4:
+				WeaponName = "asw_weapon_sentry_cannon";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+			}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "炮台 !");
+		}
+		else if ( whatItem <= 80 )
+		{
+			WeaponName = "asw_weapon_minigun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 90 )
+		{
+			WeaponName = "asw_weapon_chainsaw";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "电锯  !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 110 )
+		{
+			WeaponName = "asw_weapon_deagle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 130 )
+		{
+			//1.6更新
+			//WeaponName = "asw_weapon_flechette";
+			//local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			//if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 170 )
+		{
+			WeaponName = "asw_weapon_prifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 190 )
+		{
+			WeaponName = "asw_weapon_autogun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 220 )
+		{
+			//2020/01/20更新
+			WeaponName = "asw_weapon_devastator";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 250 )
+		{
+			WeaponName = "asw_weapon_combat_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 280 )
+		{
+			WeaponName = "asw_weapon_heavy_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 310 )
+		{
+			WeaponName = "asw_weapon_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 350 )
+		{
+			WeaponName = "asw_weapon_tesla_gun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 390 )
+		{
+			WeaponName = "asw_weapon_pdw";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 440 )
+		{
+			WeaponName = "asw_weapon_railgun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 490 )
+		{
+			WeaponName = "asw_weapon_mining_laser";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 540 )
+		{
+			//WeaponName = "asw_weapon_fire_extinguisher";
+			//local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			//if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+
+		// Extra weapon
+		else if ( whatItem <= 564 )
+		{
+			WeaponName = "asw_weapon_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 588 )
+		{
+			WeaponName = "asw_weapon_smart_bomb";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 612 )
+		{
+			WeaponName = "asw_weapon_gas_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 636 )
+		{
+			switch ( RandomInt( 1, 2 ) )
+			{
+			case 1:
+			WeaponName = "asw_weapon_jump_jet";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+
+			case 2:
+			WeaponName = "asw_weapon_blink";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+			}
+		}
+		else if ( whatItem <= 660 )
+		{
+			WeaponName = "asw_weapon_medkit";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Bastille")
+				{
+					////3.5更新注释掉提示 ClientPrint(null, 3, "小血包! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 684 )
+		{
+			WeaponName = "asw_weapon_freeze_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wildcat")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "冰冻手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 708 )
+		{
+
+		}
+		else if ( whatItem <= 732 )
+		{
+			WeaponName = "asw_weapon_electrified_armor";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 756 )
+		{
+			WeaponName = "asw_weapon_laser_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Sarge")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "感应地雷! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 780 )
+		{
+			WeaponName = "asw_weapon_hornet_barrage";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 804 )
+		{
+			WeaponName = "asw_weapon_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wolfe")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 828 )
+		{
+			WeaponName = "asw_weapon_buff_grenade";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Vegas")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "威力增强装置! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 852 )
+		{
+			WeaponName = "asw_weapon_tesla_trap";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Crash")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "特斯拉线圈! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 876 )
+		{
+			WeaponName = "asw_weapon_flashlight";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 900 )
+		{
+			WeaponName = "asw_weapon_night_vision";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Jaeger")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "夜视仪! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+	}
+}
+else if ( attacker.GetClassname() == "asw_marine" && victim.IsAlien() && victim.GetClassname() == "asw_ranger" )
+{
+	local WeaponName = "";
+	local randomChance = RandomInt( 1, 1000 );
+
+	// drop rate default 100 (10%)
+	//1.7修改爆率原100 -> 10
+	//1.8修改爆率 -->1
+	if ( randomChance > difficultyCorrect + 1 )
+		return;
+
+	// lucky chance default 40 (2.5%, 5%)
+	local luckyCheck = RandomInt( 1, 40 );
+
+	switch ( luckyCheck )
+	{
+		case 1:
+		luckyCheck = 3;
+		////3.5更新注释掉提示 ClientPrint(null, 3, "走狗屎运 !");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		case 2:
+		case 3:
+		luckyCheck = 2;
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		default:
+		luckyCheck = 1;
+	}
+
+	for ( local i = 0 ; i < luckyCheck ; i++)
+	{
+		local whatItem = RandomInt( 1, 655 );
+
+		// Weapon
+		if ( whatItem <= 10 )
+		{
+			WeaponName = "asw_weapon_flamer";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "喷火器!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 20 )
+		{
+			WeaponName = "asw_weapon_grenade_launcher";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "榴弹发射器 !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 23 )
+		{
+			WeaponName = "asw_weapon_50calmg";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			////3.5更新注释掉提示 ClientPrint(null, 3, "SUPER !!!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "marine_resurrection_glow2");
+		}
+		else if ( whatItem <= 43 )
+		{
+			WeaponName = "asw_weapon_vindicator";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 63 )
+		{
+			switch ( RandomInt( 1, 4 ) )
+			{
+				case 1:
+				WeaponName = "asw_weapon_sentry";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 2:
+				WeaponName = "asw_weapon_sentry_freeze";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 3:
+				WeaponName = "asw_weapon_sentry_flamer";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 4:
+				WeaponName = "asw_weapon_sentry_cannon";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+			}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "炮台 !");
+		}
+		else if ( whatItem <= 83 )
+		{
+			WeaponName = "asw_weapon_minigun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 93 )
+		{
+			WeaponName = "asw_weapon_chainsaw";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "电锯  !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 113 )
+		{
+			WeaponName = "asw_weapon_deagle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 133 )
+		{
+			//1.6更新
+			//WeaponName = "asw_weapon_flechette";
+			//local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			//if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 163 )
+		{
+			WeaponName = "asw_weapon_prifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 193 )
+		{
+			WeaponName = "asw_weapon_autogun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 223 )
+		{
+			////2020/01/20更新
+			WeaponName = "asw_weapon_devastator";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 253 )
+		{
+			WeaponName = "asw_weapon_combat_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 283 )
+		{
+			WeaponName = "asw_weapon_heavy_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 313 )
+		{
+			WeaponName = "asw_weapon_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 353 )
+		{
+			WeaponName = "asw_weapon_tesla_gun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 393 )
+		{
+			WeaponName = "asw_weapon_pdw";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+
+		// Extra weapon
+		else if ( whatItem <= 410 )
+		{
+			WeaponName = "asw_weapon_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 428 )
+		{
+			WeaponName = "asw_weapon_smart_bomb";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 445 )
+		{
+			WeaponName = "asw_weapon_gas_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 463 )
+		{
+			switch ( RandomInt( 1, 2 ) )
+			{
+			case 1:
+			WeaponName = "asw_weapon_jump_jet";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+
+			case 2:
+			WeaponName = "asw_weapon_blink";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+			}
+		}
+		else if ( whatItem <= 480 )
+		{
+			WeaponName = "asw_weapon_medkit";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Bastille")
+				{
+					////3.5更新注释掉提示 ClientPrint(null, 3, "小血包! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 498 )
+		{
+			WeaponName = "asw_weapon_freeze_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wildcat")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "冰冻手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 515 )
+		{
+
+		}
+		else if ( whatItem <= 533 )
+		{
+			WeaponName = "asw_weapon_electrified_armor";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 550 )
+		{
+			WeaponName = "asw_weapon_laser_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Sarge")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "感应地雷! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 568 )
+		{
+			WeaponName = "asw_weapon_hornet_barrage";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 585 )
+		{
+			WeaponName = "asw_weapon_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wolfe")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 603 )
+		{
+			WeaponName = "asw_weapon_buff_grenade";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Vegas")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "威力增强装置! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 620 )
+		{
+			WeaponName = "asw_weapon_tesla_trap";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Crash")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "特斯拉线圈! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 638 )
+		{
+			WeaponName = "asw_weapon_flashlight";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 655 )
+		{
+			WeaponName = "asw_weapon_night_vision";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Jaeger")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "夜视仪! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+	}
+}
+else if ( attacker.GetClassname() == "asw_marine" && victim.IsAlien() && victim.GetClassname() == "asw_buzzer" )
+{
+	local WeaponName = "";
+	local randomChance = RandomInt( 1, 1000 );
+
+	// drop rate default 120 (12%)
+	//1.7修改爆率原120 -> 12
+	//1.8修改爆率 -->1
+	if ( randomChance > difficultyCorrect + 1 )
+		return;
+
+	// lucky chance default 40 (2.5%, 5%)
+	local luckyCheck = RandomInt( 1, 40 );
+
+	switch ( luckyCheck )
+	{
+		case 1:
+		luckyCheck = 3;
+		////3.5更新注释掉提示 ClientPrint(null, 3, "走狗屎运 !");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		case 2:
+		case 3:
+		luckyCheck = 2;
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		default:
+		luckyCheck = 1;
+	}
+
+	for ( local i = 0 ; i < luckyCheck ; i++)
+	{
+		local whatItem = RandomInt( 1, 150 );
+
+		// Extra weapon
+		if ( whatItem <= 10 )
+		{
+			WeaponName = "asw_weapon_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 20 )
+		{
+			WeaponName = "asw_weapon_smart_bomb";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 30 )
+		{
+			WeaponName = "asw_weapon_gas_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 40 )
+		{
+			switch ( RandomInt( 1, 2 ) )
+			{
+			case 1:
+			WeaponName = "asw_weapon_jump_jet";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+
+			case 2:
+			WeaponName = "asw_weapon_blink";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+			}
+		}
+		else if ( whatItem <= 50 )
+		{
+			WeaponName = "asw_weapon_medkit";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Bastille")
+				{
+					////3.5更新注释掉提示 ClientPrint(null, 3, "小血包! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 60 )
+		{
+			WeaponName = "asw_weapon_freeze_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wildcat")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "冰冻手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 70 )
+		{
+
+		}
+		else if ( whatItem <= 80 )
+		{
+			WeaponName = "asw_weapon_electrified_armor";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 90 )
+		{
+			WeaponName = "asw_weapon_laser_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Sarge")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "感应地雷! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 100 )
+		{
+			WeaponName = "asw_weapon_hornet_barrage";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 110 )
+		{
+			WeaponName = "asw_weapon_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wolfe")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 120 )
+		{
+			WeaponName = "asw_weapon_buff_grenade";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Vegas")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "威力增强装置! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 130 )
+		{
+			WeaponName = "asw_weapon_tesla_trap";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Crash")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "特斯拉线圈! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 140 )
+		{
+			WeaponName = "asw_weapon_flashlight";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 150 )
+		{
+			WeaponName = "asw_weapon_night_vision";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Jaeger")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "夜视仪! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+	}
+}
+else if ( attacker.GetClassname() == "asw_marine" && victim.IsAlien() && victim.GetClassname() == "asw_parasite" )
+{
+	local WeaponName = "";
+	local randomChance = RandomInt( 1, 1000 );
+
+	// drop rate default 120 (12%)
+	//1.7修改爆率原120 -> 12
+	//1.8修改爆率 -->1
+	if ( randomChance > difficultyCorrect + 1 )
+		return;
+
+	// lucky chance default 40 (2.5%, 5%)
+	local luckyCheck = RandomInt( 1, 40 );
+
+	switch ( luckyCheck )
+	{
+		case 1:
+		luckyCheck = 3;
+		////3.5更新注释掉提示 ClientPrint(null, 3, "走狗屎运 !");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		case 2:
+		case 3:
+		luckyCheck = 2;
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		default:
+		luckyCheck = 1;
+	}
+
+	for ( local i = 0 ; i < luckyCheck ; i++)
+	{
+		local whatItem = RandomInt( 1, 170 );
+
+		// Extra weapon
+		if ( whatItem <= 10 )
+		{
+			WeaponName = "asw_weapon_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 20 )
+		{
+			WeaponName = "asw_weapon_smart_bomb";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 30 )
+		{
+			WeaponName = "asw_weapon_gas_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 40 )
+		{
+			switch ( RandomInt( 1, 2 ) )
+			{
+			case 1:
+			WeaponName = "asw_weapon_jump_jet";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+
+			case 2:
+			WeaponName = "asw_weapon_blink";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+			}
+		}
+		else if ( whatItem <= 50 )
+		{
+			WeaponName = "asw_weapon_medkit";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Bastille")
+				{
+					////3.5更新注释掉提示 ClientPrint(null, 3, "小血包! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 60 )
+		{
+			WeaponName = "asw_weapon_freeze_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wildcat")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "冰冻手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 70 )
+		{
+
+		}
+		else if ( whatItem <= 80 )
+		{
+			WeaponName = "asw_weapon_night_vision";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Jaeger")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "夜视仪! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 90 )
+		{
+			WeaponName = "asw_weapon_laser_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Sarge")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "感应地雷! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 100 )
+		{
+			WeaponName = "asw_weapon_hornet_barrage";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 110 )
+		{
+			WeaponName = "asw_weapon_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wolfe")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 120 )
+		{
+			WeaponName = "asw_weapon_buff_grenade";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Vegas")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "威力增强装置! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 130 )
+		{
+			WeaponName = "asw_weapon_tesla_trap";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Crash")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "特斯拉线圈! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 140 )
+		{
+			WeaponName = "asw_weapon_flashlight";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 170 )
+		{
+			WeaponName = "asw_weapon_electrified_armor";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+	}
+}
+else if ( attacker.GetClassname() == "asw_marine" && victim.IsAlien() && (victim.GetClassname() == "asw_boomer" || victim.GetClassname() == "asw_shieldbug") )
+{
+	local WeaponName = "";
+
+	// lucky chance default 40 (2.5%, 5%)
+	local luckyCheck = RandomInt( 1, 40 );
+
+	switch ( luckyCheck )
+	{
+		case 1:
+		luckyCheck = 3;
+		////3.5更新注释掉提示 ClientPrint(null, 3, "走狗屎运 !");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		case 2:
+		case 3:
+		luckyCheck = 2;
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		default:
+		luckyCheck = 1;
+	}
+
+	for ( local i = 0 ; i < luckyCheck ; i++)
+	{
+		local whatItem = RandomInt( 1, 222 );
+
+		// Weapon
+		if ( whatItem <= 10 )
+		{
+			WeaponName = "asw_weapon_flamer";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "喷火器!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 20 )
+		{
+			WeaponName = "asw_weapon_grenade_launcher";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "榴弹发射器 !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 23 )
+		{
+			WeaponName = "asw_weapon_50calmg";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			////3.5更新注释掉提示 ClientPrint(null, 3, "SUPER !!!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "marine_resurrection_glow2");
+		}
+		else if ( whatItem <= 43 )
+		{
+			WeaponName = "asw_weapon_vindicator";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 63 )
+		{
+			switch ( RandomInt( 1, 4 ) )
+			{
+				case 1:
+				WeaponName = "asw_weapon_sentry";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 2:
+				WeaponName = "asw_weapon_sentry_freeze";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 3:
+				WeaponName = "asw_weapon_sentry_flamer";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 4:
+				WeaponName = "asw_weapon_sentry_cannon";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+			}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "炮台 !");
+		}
+		else if ( whatItem <= 83 )
+		{
+			WeaponName = "asw_weapon_minigun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 93 )
+		{
+			WeaponName = "asw_weapon_chainsaw";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "电锯  !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 113 )
+		{
+			WeaponName = "asw_weapon_deagle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 133 )
+		{
+			//1.6更新
+			//WeaponName = "asw_weapon_flechette";
+			//local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			//if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		// Extra weapon
+		else if ( whatItem <= 139 )
+		{
+			WeaponName = "asw_weapon_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 145 )
+		{
+			WeaponName = "asw_weapon_smart_bomb";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 151 )
+		{
+			WeaponName = "asw_weapon_gas_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 157 )
+		{
+			switch ( RandomInt( 1, 2 ) )
+			{
+			case 1:
+			WeaponName = "asw_weapon_jump_jet";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+
+			case 2:
+			WeaponName = "asw_weapon_blink";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+			}
+		}
+		else if ( whatItem <= 163 )
+		{
+			WeaponName = "asw_weapon_medkit";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Bastille")
+				{
+					////3.5更新注释掉提示 ClientPrint(null, 3, "小血包! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 168 )
+		{
+			WeaponName = "asw_weapon_freeze_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wildcat")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "冰冻手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 174 )
+		{
+
+		}
+		else if ( whatItem <= 180 )
+		{
+			WeaponName = "asw_weapon_electrified_armor";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 186 )
+		{
+			WeaponName = "asw_weapon_laser_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Sarge")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "感应地雷! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 192 )
+		{
+			WeaponName = "asw_weapon_hornet_barrage";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 198 )
+		{
+			WeaponName = "asw_weapon_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wolfe")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 204 )
+		{
+			WeaponName = "asw_weapon_buff_grenade";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Vegas")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "威力增强装置! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 210 )
+		{
+			WeaponName = "asw_weapon_tesla_trap";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Crash")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "特斯拉线圈! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 216 )
+		{
+			WeaponName = "asw_weapon_flashlight";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 222 )
+		{
+			WeaponName = "asw_weapon_night_vision";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Jaeger")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "夜视仪! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+	}
+}
+else if ( attacker.GetClassname() == "asw_marine" && victim.IsAlien() && victim.GetClassname() == "asw_harvester" )
+{
+	local WeaponName = "";
+
+	// lucky chance default 40 (2.5%, 5%)
+	local luckyCheck = RandomInt( 1, 40 );
+
+	switch ( luckyCheck )
+	{
+		case 1:
+		luckyCheck = 3;
+		////3.5更新注释掉提示 ClientPrint(null, 3, "走狗屎运 !");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		case 2:
+		case 3:
+		luckyCheck = 2;
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		default:
+		luckyCheck = 1;
+	}
+
+	for ( local i = 0 ; i < luckyCheck ; i++)
+	{
+		local whatItem = RandomInt( 1, 522 );
+
+		// Weapon
+		if ( whatItem <= 10 )
+		{
+			WeaponName = "asw_weapon_flamer";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "喷火器!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 20 )
+		{
+			WeaponName = "asw_weapon_grenade_launcher";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "榴弹发射器 !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 23 )
+		{
+			WeaponName = "asw_weapon_50calmg";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			////3.5更新注释掉提示 ClientPrint(null, 3, "SUPER !!!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "marine_resurrection_glow2");
+		}
+		else if ( whatItem <= 43 )
+		{
+			WeaponName = "asw_weapon_vindicator";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 63 )
+		{
+			switch ( RandomInt( 1, 4 ) )
+			{
+				case 1:
+				WeaponName = "asw_weapon_sentry";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 2:
+				WeaponName = "asw_weapon_sentry_freeze";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 3:
+				WeaponName = "asw_weapon_sentry_flamer";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 4:
+				WeaponName = "asw_weapon_sentry_cannon";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+			}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "炮台 !");
+		}
+		else if ( whatItem <= 83 )
+		{
+			WeaponName = "asw_weapon_minigun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 93 )
+		{
+			WeaponName = "asw_weapon_chainsaw";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "电锯  !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 113 )
+		{
+			WeaponName = "asw_weapon_deagle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 133 )
+		{
+			//1.6更新
+			//WeaponName = "asw_weapon_flechette";
+			//local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			//if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 163 )
+		{
+			WeaponName = "asw_weapon_prifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 193 )
+		{
+			WeaponName = "asw_weapon_autogun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 223 )
+		{
+			////2020/01/20更新
+			WeaponName = "asw_weapon_devastator";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 253 )
+		{
+			WeaponName = "asw_weapon_combat_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 283 )
+		{
+			WeaponName = "asw_weapon_heavy_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 313 )
+		{
+			WeaponName = "asw_weapon_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		// Extra weapon
+		else if ( whatItem <= 327 )
+		{
+			WeaponName = "asw_weapon_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 341 )
+		{
+			WeaponName = "asw_weapon_smart_bomb";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 355 )
+		{
+			WeaponName = "asw_weapon_gas_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 369 )
+		{
+			switch ( RandomInt( 1, 2 ) )
+			{
+			case 1:
+			WeaponName = "asw_weapon_jump_jet";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+
+			case 2:
+			WeaponName = "asw_weapon_blink";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+			}
+		}
+		else if ( whatItem <= 383 )
+		{
+			WeaponName = "asw_weapon_medkit";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Bastille")
+				{
+					////3.5更新注释掉提示 ClientPrint(null, 3, "小血包! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 396 )
+		{
+			WeaponName = "asw_weapon_freeze_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wildcat")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "冰冻手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 410 )
+		{
+
+		}
+		else if ( whatItem <= 424 )
+		{
+			WeaponName = "asw_weapon_electrified_armor";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 438 )
+		{
+			WeaponName = "asw_weapon_laser_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Sarge")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "感应地雷! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 452 )
+		{
+			WeaponName = "asw_weapon_hornet_barrage";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 466 )
+		{
+			WeaponName = "asw_weapon_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wolfe")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 480 )
+		{
+			WeaponName = "asw_weapon_buff_grenade";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Vegas")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "威力增强装置! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 494 )
+		{
+			WeaponName = "asw_weapon_tesla_trap";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Crash")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "特斯拉线圈! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 508 )
+		{
+			WeaponName = "asw_weapon_flashlight";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 522 )
+		{
+			WeaponName = "asw_weapon_night_vision";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Jaeger")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "夜视仪! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+	}
+}
+else if ( attacker.GetClassname() == "asw_marine" && victim.IsAlien() && victim.GetClassname() == "asw_drone_uber" )
+{
+	local WeaponName = "";
+
+	// lucky chance default 40 (2.5%, 5%)
+	local luckyCheck = RandomInt( 1, 40 );
+
+	switch ( luckyCheck )
+	{
+		case 1:
+		luckyCheck = 3;
+		////3.5更新注释掉提示 ClientPrint(null, 3, "走狗屎运 !");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		case 2:
+		case 3:
+		luckyCheck = 2;
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		default:
+		luckyCheck = 1;
+	}
+
+	for ( local i = 0 ; i < luckyCheck ; i++)
+	{
+		local whatItem = RandomInt( 1, 538 );
+
+		// Weapon
+		if ( whatItem <= 10 )
+		{
+			WeaponName = "asw_weapon_flamer";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "喷火器!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 20 )
+		{
+			WeaponName = "asw_weapon_grenade_launcher";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "榴弹发射器 !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 23 )
+		{
+			WeaponName = "asw_weapon_50calmg";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			////3.5更新注释掉提示 ClientPrint(null, 3, "SUPER !!!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "marine_resurrection_glow2");
+		}
+		else if ( whatItem <= 43 )
+		{
+			WeaponName = "asw_weapon_vindicator";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 63 )
+		{
+			switch ( RandomInt( 1, 4 ) )
+			{
+				case 1:
+				WeaponName = "asw_weapon_sentry";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 2:
+				WeaponName = "asw_weapon_sentry_freeze";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 3:
+				WeaponName = "asw_weapon_sentry_flamer";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 4:
+				WeaponName = "asw_weapon_sentry_cannon";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+			}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "炮台 !");
+		}
+		else if ( whatItem <= 83 )
+		{
+			WeaponName = "asw_weapon_minigun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 103 )
+		{
+			WeaponName = "asw_weapon_chainsaw";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "电锯  !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 123 )
+		{
+			WeaponName = "asw_weapon_deagle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 143 )
+		{
+			//1.6更新
+			//WeaponName = "asw_weapon_flechette";
+			//local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			//if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 173 )
+		{
+			WeaponName = "asw_weapon_prifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 203 )
+		{
+			WeaponName = "asw_weapon_autogun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 233 )
+		{
+			//2020/01/20更新
+			WeaponName = "asw_weapon_devastator";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 263 )
+		{
+			WeaponName = "asw_weapon_combat_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 293 )
+		{
+			WeaponName = "asw_weapon_heavy_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 323 )
+		{
+			WeaponName = "asw_weapon_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		// Extra weapon
+		else if ( whatItem <= 337 )
+		{
+			WeaponName = "asw_weapon_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 352 )
+		{
+			WeaponName = "asw_weapon_smart_bomb";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 366 )
+		{
+			WeaponName = "asw_weapon_gas_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 380 )
+		{
+			switch ( RandomInt( 1, 2 ) )
+			{
+			case 1:
+			WeaponName = "asw_weapon_jump_jet";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+
+			case 2:
+			WeaponName = "asw_weapon_blink";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+			}
+		}
+		else if ( whatItem <= 395 )
+		{
+			WeaponName = "asw_weapon_medkit";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Bastille")
+				{
+					////3.5更新注释掉提示 ClientPrint(null, 3, "小血包!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 409 )
+		{
+			WeaponName = "asw_weapon_freeze_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wildcat")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "冰冻手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 423 )
+		{
+
+		}
+		else if ( whatItem <= 438 )
+		{
+			WeaponName = "asw_weapon_electrified_armor";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 452 )
+		{
+			WeaponName = "asw_weapon_laser_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Sarge")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "感应地雷! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 467 )
+		{
+			WeaponName = "asw_weapon_hornet_barrage";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 481 )
+		{
+			WeaponName = "asw_weapon_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wolfe")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 495 )
+		{
+			WeaponName = "asw_weapon_buff_grenade";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Vegas")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "威力增强装置! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 510 )
+		{
+			WeaponName = "asw_weapon_tesla_trap";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Crash")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "特斯拉线圈! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 524 )
+		{
+			WeaponName = "asw_weapon_flashlight";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 538 )
+		{
+			WeaponName = "asw_weapon_night_vision";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Jaeger")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "夜视仪! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+	}
+}
+else if ( attacker.GetClassname() == "asw_marine" && victim.IsAlien() && victim.GetClassname() == "asw_mortarbug" )
+{
+	local WeaponName = "";
+
+	// ammo fixed
+	//1.6更新
+	//local ammo = Entities.CreateByClassname( "asw_ammo_drop" );
+	//if ( ammo ) {ammo.SetOrigin( victim.GetOrigin() );ammo.Spawn();}
+
+	// lucky chance default 20 (5%, 10%)
+	local luckyCheck = RandomInt( 1, 20 );
+
+	switch ( luckyCheck )
+	{
+		case 1:
+		luckyCheck = 5;
+		////3.5更新注释掉提示 ClientPrint(null, 3, "走狗屎运 !!!");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		case 2:
+		case 3:
+		luckyCheck = 4;
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		default:
+		luckyCheck = 3;
+	}
+
+	for ( local i = 0 ; i < luckyCheck ; i++)
+	{
+		local whatItem = RandomInt( 1, 905 );
+
+		// Weapon
+		if ( whatItem <= 10 )
+		{
+			WeaponName = "asw_weapon_flamer";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "喷火器!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 20 )
+		{
+			WeaponName = "asw_weapon_grenade_launcher";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "榴弹发射器 !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 23 )
+		{
+			WeaponName = "asw_weapon_50calmg";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			////3.5更新注释掉提示 ClientPrint(null, 3, "SUPER !!!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "marine_resurrection_glow2");
+		}
+		else if ( whatItem <= 43 )
+		{
+			WeaponName = "asw_weapon_vindicator";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 63 )
+		{
+			switch ( RandomInt( 1, 4 ) )
+			{
+				case 1:
+				WeaponName = "asw_weapon_sentry";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 2:
+				WeaponName = "asw_weapon_sentry_freeze";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 3:
+				WeaponName = "asw_weapon_sentry_flamer";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 4:
+				WeaponName = "asw_weapon_sentry_cannon";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+			}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "炮台 !");
+		}
+		else if ( whatItem <= 83 )
+		{
+			WeaponName = "asw_weapon_minigun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 93 )
+		{
+			WeaponName = "asw_weapon_chainsaw";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "电锯  !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 113 )
+		{
+			WeaponName = "asw_weapon_deagle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 133 )
+		{
+			//1.6更新
+			//WeaponName = "asw_weapon_flechette";
+			//local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			//if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 163 )
+		{
+			WeaponName = "asw_weapon_prifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 193 )
+		{
+			WeaponName = "asw_weapon_autogun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 223 )
+		{
+			////2020/01/20更新
+			WeaponName = "asw_weapon_devastator";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 253 )
+		{
+			WeaponName = "asw_weapon_combat_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 283 )
+		{
+			WeaponName = "asw_weapon_heavy_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 313 )
+		{
+			WeaponName = "asw_weapon_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 353 )
+		{
+			WeaponName = "asw_weapon_tesla_gun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 393 )
+		{
+			WeaponName = "asw_weapon_pdw";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 443 )
+		{
+			WeaponName = "asw_weapon_railgun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 493 )
+		{
+			WeaponName = "asw_weapon_mining_laser";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 543 )
+		{
+			//WeaponName = "asw_weapon_fire_extinguisher";
+			//local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			//if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+
+		// Extra weapon
+		else if ( whatItem <= 567 )
+		{
+			WeaponName = "asw_weapon_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 591 )
+		{
+			WeaponName = "asw_weapon_smart_bomb";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 615 )
+		{
+			WeaponName = "asw_weapon_gas_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 640 )
+		{
+			switch ( RandomInt( 1, 2 ) )
+			{
+			case 1:
+			WeaponName = "asw_weapon_jump_jet";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+
+			case 2:
+			WeaponName = "asw_weapon_blink";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+			}
+		}
+		else if ( whatItem <= 664 )
+		{
+			WeaponName = "asw_weapon_medkit";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Bastille")
+				{
+					////3.5更新注释掉提示 ClientPrint(null, 3, "小血包! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 688 )
+		{
+			WeaponName = "asw_weapon_freeze_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wildcat")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "冰冻手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 712 )
+		{
+			WeaponName = "asw_weapon_medrifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 736 )
+		{
+			WeaponName = "asw_weapon_electrified_armor";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 760 )
+		{
+			WeaponName = "asw_weapon_laser_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Sarge")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "感应地雷! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 784 )
+		{
+			WeaponName = "asw_weapon_hornet_barrage";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 808 )
+		{
+			WeaponName = "asw_weapon_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wolfe")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 833 )
+		{
+			WeaponName = "asw_weapon_buff_grenade";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Vegas")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "威力增强装置! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 857 )
+		{
+			WeaponName = "asw_weapon_tesla_trap";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Crash")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "特斯拉线圈! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 881 )
+		{
+			WeaponName = "asw_weapon_flashlight";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 905 )
+		{
+			WeaponName = "asw_weapon_night_vision";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Jaeger")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "夜视仪! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+	}
+}
+else if ( attacker.GetClassname() == "asw_marine" && victim.IsAlien() && victim.GetClassname() == "asw_shaman" )
+{
+	local WeaponName = "";
+
+	local randomChance = RandomInt( 1, 1000 );
+
+	// drop rate default 2 (0.2%)
+	if ( randomChance > 2 )
+		return;
+
+	WeaponName = "asw_weapon_medkit";
+	local weapon_pickup = Entities.CreateByClassname( WeaponName );
+	if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+	local hMarine = null;
+	while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+	{
+		if(hMarine.GetMarineName() == "Bastille")
+		{
+			////3.5更新注释掉提示 ClientPrint(null, 3, "小血包! ");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+			CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+			break;
+		}
+	}
+}
+else if ( attacker.GetClassname() == "asw_marine" && victim.IsAlien() && ( victim.GetClassname() == "npc_antlionguard_normal" || victim.GetClassname() == "npc_antlionguard_cavern") )
+{
+	local WeaponName = "";
+
+	// lucky chance default 40 (2.5%, 5%)
+	local luckyCheck = RandomInt( 1, 550 );
+
+	switch ( luckyCheck )
+	{
+		case 1:
+		luckyCheck = 3;
+		////3.5更新注释掉提示 ClientPrint(null, 3, "走狗屎运 !");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		break;
+
+		case 2:
+		case 3:
+		CreateParticleFunc(2, victim.GetOrigin(), Vector(0, 0, 0), "embers_medium_0New");
+		luckyCheck = 2;
+		break;
+
+		default:
+		luckyCheck = 1;
+	}
+
+	for ( local i = 0 ; i < luckyCheck ; i++)
+	{
+		local whatItem = RandomInt( 1, 49 );
+
+		// Weapon
+		if ( whatItem <= 100 )
+		{
+			WeaponName = "asw_weapon_flamer";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "喷火器!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 200 )
+		{
+			WeaponName = "asw_weapon_grenade_launcher";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "榴弹发射器 !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 230 )
+		{
+			WeaponName = "asw_weapon_50calmg";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			////3.5更新注释掉提示 ClientPrint(null, 3, "SUPER !!!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "marine_resurrection_glow2");
+		}
+		else if ( whatItem <= 330 )
+		{
+			WeaponName = "asw_weapon_chainsaw";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "电锯  !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		// Extra weapon
+		else if ( whatItem <= 345 )
+		{
+			WeaponName = "asw_weapon_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 359 )
+		{
+			WeaponName = "asw_weapon_smart_bomb";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 374 )
+		{
+			WeaponName = "asw_weapon_gas_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 389 )
+		{
+			switch ( RandomInt( 1, 2 ) )
+			{
+			case 1:
+			WeaponName = "asw_weapon_jump_jet";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+
+			case 2:
+			WeaponName = "asw_weapon_blink";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+			}
+		}
+		else if ( whatItem <= 403 )
+		{
+			WeaponName = "asw_weapon_medkit";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Bastille")
+				{
+					////3.5更新注释掉提示 ClientPrint(null, 3, "小血包!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 418 )
+		{
+			WeaponName = "asw_weapon_freeze_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wildcat")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "冰冻手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 433 )
+		{
+
+		}
+		else if ( whatItem <= 447 )
+		{
+			WeaponName = "asw_weapon_electrified_armor";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 462 )
+		{
+			WeaponName = "asw_weapon_laser_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Sarge")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "感应地雷! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 477 )
+		{
+			WeaponName = "asw_weapon_hornet_barrage";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 491 )
+		{
+			WeaponName = "asw_weapon_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wolfe")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 506 )
+		{
+			WeaponName = "asw_weapon_buff_grenade";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Vegas")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "威力增强装置! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 521 )
+		{
+			WeaponName = "asw_weapon_tesla_trap";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Crash")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "特斯拉线圈! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 535 )
+		{
+			WeaponName = "asw_weapon_flashlight";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 550 )
+		{
+			WeaponName = "asw_weapon_night_vision";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Jaeger")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "夜视仪! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+	}
+}
+else if ( attacker.GetClassname() == "asw_marine" && victim.IsAlien() && victim.GetClassname() == "asw_queen" )
+{
+	local WeaponName = "";
+
+	// beacon
+	PlaceHealBeacon(835, 14, 0, 30, 150, victim.GetOrigin());
+
+	// ammo fixed
+	//1.6更新
+	//local ammo = Entities.CreateByClassname( "asw_ammo_drop" );
+	//if ( ammo ) {ammo.SetOrigin( victim.GetOrigin() );ammo.Spawn();}
+	//local ammo = Entities.CreateByClassname( "asw_ammo_drop" );
+	//if ( ammo ) {ammo.SetOrigin( victim.GetOrigin() );ammo.Spawn();}
+	//local ammo = Entities.CreateByClassname( "asw_ammo_drop" );
+	//if ( ammo ) {ammo.SetOrigin( victim.GetOrigin() );ammo.Spawn();}
+	//local ammo = Entities.CreateByClassname( "asw_ammo_drop" );
+	//if ( ammo ) {ammo.SetOrigin( victim.GetOrigin() );ammo.Spawn();}
+	//local ammo = Entities.CreateByClassname( "asw_ammo_drop" );
+	//if ( ammo ) {ammo.SetOrigin( victim.GetOrigin() );ammo.Spawn();}
+
+	// 50calmg fixed
+	WeaponName = "asw_weapon_50calmg";
+	local weapon_pickup = Entities.CreateByClassname( WeaponName );
+	if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+	////3.5更新注释掉提示 ClientPrint(null, 3, "SUPER !!!");
+	CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "marine_resurrection_glow2");
+
+	// 1t x 2
+	for ( local i = 0 ; i < 2 ; i++)
+	{
+		local whatItem = RandomInt( 1, 53 );
+
+		// Weapon
+		if ( whatItem <= 10 )
+		{
+			WeaponName = "asw_weapon_flamer";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "喷火器!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 20 )
+		{
+			WeaponName = "asw_weapon_grenade_launcher";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "榴弹发射器 !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 23 )
+		{
+			WeaponName = "asw_weapon_50calmg";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			////3.5更新注释掉提示 ClientPrint(null, 3, "SUPER !!!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "marine_resurrection_glow2");
+		}
+		// Extra weapon
+		else if ( whatItem <= 28 )
+		{
+			WeaponName = "asw_weapon_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 33 )
+		{
+			WeaponName = "asw_weapon_smart_bomb";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 38 )
+		{
+			WeaponName = "asw_weapon_gas_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 43 )
+		{
+			switch ( RandomInt( 1, 2 ) )
+			{
+			case 1:
+			WeaponName = "asw_weapon_jump_jet";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+
+			case 2:
+			WeaponName = "asw_weapon_blink";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+			}
+		}
+		// addition
+		else if ( whatItem <= 53 )
+		{
+			WeaponName = "asw_weapon_chainsaw";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "电锯!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+	}
+	// up 4t x 5
+	for ( local i = 0 ; i < 5 ; i++)
+	{
+		local whatItem = RandomInt( 1, 703 );
+
+		// Weapon
+		if ( whatItem <= 10 )
+		{
+			WeaponName = "asw_weapon_flamer";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "喷火器!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 20 )
+		{
+			WeaponName = "asw_weapon_grenade_launcher";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "榴弹发射器 !");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 23 )
+		{
+			WeaponName = "asw_weapon_50calmg";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			////3.5更新注释掉提示 ClientPrint(null, 3, "SUPER !!!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "marine_resurrection_glow2");
+		}
+		else if ( whatItem <= 43 )
+		{
+			WeaponName = "asw_weapon_vindicator";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 63 )
+		{
+			switch ( RandomInt( 1, 4 ) )
+			{
+				case 1:
+				WeaponName = "asw_weapon_sentry";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 2:
+				WeaponName = "asw_weapon_sentry_freeze";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 3:
+				WeaponName = "asw_weapon_sentry_flamer";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+
+				case 4:
+				WeaponName = "asw_weapon_sentry_cannon";
+				local weapon_pickup = Entities.CreateByClassname( WeaponName );
+				if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+				CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+				break;
+			}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "炮台 !");
+		}
+		else if ( whatItem <= 83 )
+		{
+			WeaponName = "asw_weapon_minigun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 93 )
+		{
+			WeaponName = "asw_weapon_chainsaw";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			//3.5更新注释掉提示 ClientPrint(null, 3, "电锯!");
+			CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "ms_explosion_groundring");
+		}
+		else if ( whatItem <= 113 )
+		{
+			WeaponName = "asw_weapon_deagle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+
+		else if ( whatItem <= 133 )
+		{
+			//1.6更新
+			//WeaponName = "asw_weapon_flechette";
+			//local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			//if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 163 )
+		{
+			WeaponName = "asw_weapon_prifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 193 )
+		{
+			WeaponName = "asw_weapon_autogun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 223 )
+		{
+			//2020/01/20更新
+			WeaponName = "asw_weapon_devastator";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 253 )
+		{
+			WeaponName = "asw_weapon_combat_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 283 )
+		{
+			WeaponName = "asw_weapon_heavy_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 313 )
+		{
+			WeaponName = "asw_weapon_rifle";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 353 )
+		{
+			WeaponName = "asw_weapon_tesla_gun";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 393 )
+		{
+			WeaponName = "asw_weapon_pdw";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+
+		// Extra weapon
+		else if ( whatItem <= 414 )
+		{
+			WeaponName = "asw_weapon_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 434 )
+		{
+			WeaponName = "asw_weapon_smart_bomb";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 455 )
+		{
+			WeaponName = "asw_weapon_gas_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 476 )
+		{
+			switch ( RandomInt( 1, 2 ) )
+			{
+			case 1:
+			WeaponName = "asw_weapon_jump_jet";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+
+			case 2:
+			WeaponName = "asw_weapon_blink";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+			break;
+			}
+		}
+		else if ( whatItem <= 496 )
+		{
+			WeaponName = "asw_weapon_medkit";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Bastille")
+				{
+					////3.5更新注释掉提示 ClientPrint(null, 3, "小血包! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 517 )
+		{
+			WeaponName = "asw_weapon_freeze_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wildcat")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "冰冻手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 538 )
+		{
+
+		}
+		else if ( whatItem <= 558 )
+		{
+			WeaponName = "asw_weapon_electrified_armor";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 579 )
+		{
+			WeaponName = "asw_weapon_laser_mines";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Sarge")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "感应地雷! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 600 )
+		{
+			WeaponName = "asw_weapon_hornet_barrage";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 620 )
+		{
+			WeaponName = "asw_weapon_grenades";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Wolfe")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "手雷!");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 641 )
+		{
+			WeaponName = "asw_weapon_buff_grenade";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Vegas")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "威力增强装置! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 661 )
+		{
+			WeaponName = "asw_weapon_tesla_trap";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Crash")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "特斯拉线圈! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+		else if ( whatItem <= 682 )
+		{
+			WeaponName = "asw_weapon_flashlight";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+		}
+		else if ( whatItem <= 703 )
+		{
+			WeaponName = "asw_weapon_night_vision";
+			local weapon_pickup = Entities.CreateByClassname( WeaponName );
+			if ( weapon_pickup ){weapon_pickup.SetOrigin( victim.GetOrigin() );weapon_pickup.Spawn();}
+
+			local hMarine = null;
+			while((hMarine = Entities.FindByClassname(hMarine, "asw_marine")) != null )
+			{
+				if(hMarine.GetMarineName() == "Jaeger")
+				{
+					//3.5更新注释掉提示 ClientPrint(null, 3, "夜视仪! ");
+					CreateParticleFunc(2, weapon_pickup.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					CreateParticleFunc(2, hMarine.GetOrigin(), Vector(0, 0, 0), "melee_suck_in_release");
+					break;
+				}
+			}
+		}
+	}
+
+
+
+
+
+
+
+
+
+
+
+	return;
+}
+}
+function OnGameEvent_marine_incapacitated(params)
+{
+	local incapacitated = EntIndexToHScript(params["entindex"]);
+	if (chainsaw.rawin(incapacitated)){
+		chainsaw[incapacitated].StopSound("ASW_Chainsaw.attackOn");
+		chainsaw[incapacitated].EmitSound("ASW_Chainsaw.Stop");
+		DoEntFire("!self", "Kill", "", 0, null, particleChainsawTable[chainsaw[incapacitated]]);
+		particleChainsawTable.rawdelete(chainsaw[incapacitated]);
+		DoEntFire("!self", "Kill", "", 0, null, chainsaw[incapacitated]);
+		chainsaw.rawdelete(incapacitated);
+	}
+
+	if (incapacitated.GetModelName() == "models/aliens/mortar/mortar.mdl"){
+		local targettodestroy = null;
+		while((targettodestroy = Entities.FindByName(targettodestroy, "0fun_mortarthink")) != null){
+			if (targettodestroy.GetOwner() == incapacitated)
+				targettodestroy.Destroy();
+		}
+
+		local flMarineMaxHealth = incapacitated.GetMaxHealth().tofloat();
+		local flHealth = ((incapacitated.GetHealth().tofloat()*100)/flMarineMaxHealth)/100;
+		incapacitated.SetMaxHealth(incapacitated.GetMaxHealth()/2);
+		incapacitated.SetHealth(incapacitated.GetMaxHealth().tofloat()*flHealth);
+		if (isawaliable[incapacitated] == "male")
+			incapacitated.SetModel("models/swarm/marine/marine.mdl");
+		else incapacitated.SetModel("models/swarm/marine/femalemarine.mdl");
+		incapacitated.SetSize(Vector(-13,-13,0), Vector(13,13,72));
+		NetProps.SetPropFloat(incapacitated, "m_flModelScale", 1);
+
+		if (hMortarProp.rawin(incapacitated)){
+			hMortarProp[incapacitated].Destroy();
+			hMortarProp.rawdelete(incapacitated);
+			if (incapacitated.IsInhabited()){
+				NetProps.SetPropInt(incapacitated, "movetype", 2);
+			} else NetProps.SetPropInt(incapacitated, "movetype", 3);
+		}
+	}
+
+	incParticleTable[incapacitated] <- ParticleSpawn("", 0, 0, 30, incapacitated, "rifle_grenade_pulse", "BaseCombatWeapon.WeaponMaterialize", "BaseCombatWeapon.WeaponMaterialize", incapacitated, 0, "", 0, "", incapacitated);
+	incParticleTable[incapacitated].SetOwner(incapacitated);
+	local targetScope = GetScrScope(incParticleTable[incapacitated]);
+	targetScope.maxhpTable <- maxhpTable;
+	targetScope.Delay <- function(){
+		local marine = self.GetOwner();
+		maxhpTable[marine] <- marine.GetMaxHealth();
+		g_ModeScript.maxhpTable <- maxhpTable;
+		marine.SetMaxHealth(100);
+		marine.SetHealth(100);
+		self.DisconnectOutput("OnUser1", "Delay");
+	}
+	incParticleTable[incapacitated].ConnectOutput("OnUser1", "Delay");
+	EntFireByHandle(incParticleTable[incapacitated], "FireUser1", "", 0, self, self);
+	if (marinesTable.rawin(incapacitated))
+		marinesTable.rawdelete(incapacitated);
+
+	return;
+}
+
+function OnGameEvent_marine_revived(params)
+{
+	local revived = EntIndexToHScript(params["entindex"]);
+	if (IsExtraEquipped("asw_weapon_flashlight", revived))
+		isFlashlightActive[NetProps.GetPropEntityArray(revived, "m_hMyWeapons", 2)] <- true;
+	local hParticle = ParticleSpawn(1.5, 0, 0, 0, "", "marine_resurrection", "ASWInterface.MissionBoxes", "ASWInterface.MissionBoxes", revived, 0, "Center", 0.01, "", revived);
+	DoEntFire("!self", "Kill", "", 0, null, incParticleTable[revived]);
+	incParticleTable.rawdelete(revived);
+	incDelayTable[revived] <- Time();
+	noInstaDeathAfterReviveTable[revived] <- 1;
+	marinesTable[revived] <- revived;
+	revived.SetMaxHealth(maxhpTable[revived]);
+	maxhpTable.rawdelete(revived);
+	return;
+}
+/*
+function OnGameEvent_buzzer_spawn(params){
+	local buzzer = EntIndexToHScript(params["entindex"]);
+
+	if (g_StartTime + 5 > Time())
+		return;
+
+	if (buzzer.GetName() == "")
+		DestroyViaDamageDelay(180, buzzer, 1000000000, 4098);
+
+	return;
+}
+
+function OnGameEvent_alien_spawn(params){
+	local alien = EntIndexToHScript(params["entindex"]);
+
+	if (g_StartTime + 5 > Time())
+		return;
+
+	if (alien.GetName() == "")
+		DestroyViaDamageDelay(180, alien, 1000000000, 4098);
+
+	return;
+}*/
+
+
+function OnGameEvent_fast_reload(params)
+{
+	local marine = EntIndexToHScript(params["marine"]);
+
+	for (local checkWeapon = marine.FirstMoveChild(); checkWeapon != null; checkWeapon = checkWeapon.NextMovePeer())
+	{
+		if(checkWeapon.GetClassname() == "asw_weapon_welder")
+		{
+			marine.EmitSound("ASW_Tesla_Laser.Damage");
+
+			//CreateParticleFunc(2, marine.GetOrigin(), Vector(0, 0, 0), "stungrenade_arc_sprites");
+			CreateParticleFunc(2, marine.GetOrigin() + Vector(0, 0, 0), Vector(0, 0, 0), "blink");
+			CreateParticleFunc(2, marine.GetOrigin() + Vector(0, 0, 0), Vector(0, 0, 0), "blink");
+			CreateParticleFunc(2, marine.GetOrigin() + Vector(0, 0, 0), Vector(0, 0, 0), "blink");
+
+			local nearTarget = null;
+			while((nearTarget = Entities.FindInSphere(nearTarget, marine.GetOrigin(), 120)) != null)
+			{
+				if ( nearTarget.IsAlien() )
+					nearTarget.ElectroStun(0.75);
+			}
+			break;
+		}
+	}
+	return;
+}
+
+
+function CreateParticleFunc(flAliveTime, VecOrigin, VecAngles, strParticleClass)
+{
+	local hParticle = Entities.CreateByClassname("info_particle_system");
+	hParticle.__KeyValueFromString("effect_name", strParticleClass);
+	hParticle.__KeyValueFromString("start_active", "1");
+	hParticle.SetOrigin(VecOrigin);
+	hParticle.SetAnglesVector(VecAngles);
+	hParticle.Spawn();
+	hParticle.Activate();
+	DoEntFire("!self", "Kill", "", flAliveTime, null, hParticle);
+}
+
